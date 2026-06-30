@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -11,14 +11,14 @@ from fastapi.testclient import TestClient
 from pydantic import TypeAdapter
 import pytest
 
-from cairn.dispatcher.config import DispatchConfig
-from cairn.dispatcher.models import ReasonCheckpoint
-from cairn.dispatcher.protocol.client import ApiResult
-from cairn.dispatcher.runtime.process import ProcessResult
-from cairn.dispatcher.scheduler.loop import DispatcherLoop
-from cairn.server import db
-from cairn.server.app import app
-from cairn.server.models import ProjectDetail, ProjectSummary, Settings
+from factaudit.dispatcher.config import DispatchConfig
+from factaudit.dispatcher.models import ReasonCheckpoint
+from factaudit.dispatcher.protocol.client import ApiResult
+from factaudit.dispatcher.runtime.process import ProcessResult
+from factaudit.dispatcher.scheduler.loop import DispatcherLoop
+from factaudit.server import db
+from factaudit.server.app import app
+from factaudit.server.models import ProjectDetail, ProjectSummary, Settings
 
 
 class InProcessClient:
@@ -177,7 +177,7 @@ class LocalContainerManager:
 @pytest.fixture
 def http_client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.setattr(db, "_db_path", None)
-    db.configure(tmp_path / "cairn.db")
+    db.configure(tmp_path / "factaudit.db")
     with TestClient(app) as client:
         yield client
 
@@ -218,6 +218,7 @@ def _config(
                 "bootstrap": {"timeout": 2, "conclude_timeout": 2},
                 "reason": {"timeout": 2, "max_intents": 1},
                 "explore": {"timeout": 2, "conclude_timeout": 2},
+                "develop": {"timeout": 5, "conclude_timeout": 2},
             },
             "container": {
                 "image": "unused",
@@ -259,6 +260,8 @@ def _loop(config: DispatchConfig, client: InProcessClient, containers: LocalCont
     loop._log_state = {}
     loop._cleanup_pending = set()
     loop._inactive_cleanup_done = {}
+    loop._pending_completes = {}
+    loop._develop_idle_since = {}
     loop.project_cursor = 0
     return loop
 

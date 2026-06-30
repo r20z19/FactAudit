@@ -1,0 +1,11 @@
+docker compose up --build
+
+
+在docker里面启动和关闭
+
+http://127.0.0.1:8000/
+
+docker ps -a --filter "name=cairn-dispatch-"   查看容器
+docker cp .\pwn cairn-dispatch-proj_015:/tmp/
+上传文件到里面
+

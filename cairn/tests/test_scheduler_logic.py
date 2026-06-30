@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from concurrent.futures import Future
 
-from cairn.dispatcher.models import ReasonCheckpoint, RunningTask
-from cairn.dispatcher.runtime.cancellation import TaskCancellation
-from cairn.dispatcher.scheduler.loop import DispatcherLoop
-from cairn.dispatcher.scheduler.worker_select import choose_worker
-from cairn.server.models import Fact, ProjectSummary
+from factaudit.dispatcher.models import ReasonCheckpoint, RunningTask
+from factaudit.dispatcher.runtime.cancellation import TaskCancellation
+from factaudit.dispatcher.scheduler.loop import DispatcherLoop
+from factaudit.dispatcher.scheduler.worker_select import choose_worker
+from factaudit.server.models import Fact, ProjectSummary
 
 from conftest import make_config, make_intent, make_project
 
@@ -16,8 +16,11 @@ def _loop() -> DispatcherLoop:
     loop.reason_checkpoints = {}
     loop.runtime_project_ids = set()
     loop.cleanup_futures = {}
+    loop.futures = {}
     loop._cleanup_pending = set()
     loop._inactive_cleanup_done = {}
+    loop._pending_completes = {}
+    loop._develop_idle_since = {}
     loop.worker_unhealthy_until = {}
     loop.worker_rejected_until = {}
     loop._log_state = {}
@@ -286,7 +289,7 @@ def test_select_worker_reports_busy_unhealthy_rejected_and_unsupported_workers(m
     loop.futures = {Future(): RunningTask("proj", "reason", "busy", TaskCancellation())}
     loop.worker_unhealthy_until = {"unhealthy": 110.0}
     loop.worker_rejected_until = {("proj", "reason", "rejected"): 120.0}
-    monkeypatch.setattr("cairn.dispatcher.scheduler.loop.time.time", lambda: 100.0)
+    monkeypatch.setattr("factaudit.dispatcher.scheduler.loop.time.time", lambda: 100.0)
 
     selection = loop._select_worker("proj", "reason")
 

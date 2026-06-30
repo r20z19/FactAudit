@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Iterator
 
-from cairn.dispatcher.protocol.client import ApiResult
-from cairn.dispatcher.runtime.cancellation import TaskCancellation
-from cairn.dispatcher.runtime.process import ProcessResult
-from cairn.dispatcher.tasks.common import HealthcheckRun
-from cairn.dispatcher.tasks import bootstrap, explore, reason
+from factaudit.dispatcher.protocol.client import ApiResult
+from factaudit.dispatcher.runtime.cancellation import TaskCancellation
+from factaudit.dispatcher.runtime.process import ProcessResult
+from factaudit.dispatcher.tasks.common import HealthcheckRun
+from factaudit.dispatcher.tasks import bootstrap, explore, reason
 
 from conftest import (
     FakeClient,
@@ -66,7 +66,7 @@ def test_reason_writes_graph_snapshot_and_creates_intent(monkeypatch) -> None:
     assert len(containers.writes) == 1
     container_name, path, content = containers.writes[0]
     assert container_name == "container-proj_001"
-    assert path.startswith("/tmp/cairn-prompts/reason_execute-")
+    assert path.startswith("/tmp/factaudit-prompts/reason_execute-")
     assert path.endswith("/graph.yaml")
     assert content == graph_yaml
     assert graph_yaml not in driver.execute_prompts[0]

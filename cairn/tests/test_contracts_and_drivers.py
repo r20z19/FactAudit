@@ -1,16 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
 import pytest
 
-from cairn.dispatcher.contracts import (
+from factaudit.dispatcher.contracts import (
     parse_json_output,
     validate_explore_payload,
     validate_reason_payload,
 )
-from cairn.dispatcher.runtime.process import ManagedProcess
-from cairn.dispatcher.workers.adapters.pi import PiDriver
+from factaudit.dispatcher.runtime.process import ManagedProcess
+from factaudit.dispatcher.workers.adapters.pi import PiDriver
 
 
 def test_parse_json_output_extracts_object_from_markdown_noise() -> None:

@@ -1,16 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi.testclient import TestClient
 import pytest
 
-from cairn.server import db
-from cairn.server.app import app
+from factaudit.server import db
+from factaudit.server.app import app
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.setattr(db, "_db_path", None)
-    db.configure(tmp_path / "cairn.db")
+    db.configure(tmp_path / "factaudit.db")
     with TestClient(app) as test_client:
         yield test_client
 

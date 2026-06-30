@@ -1,4 +1,4 @@
-name: Build And Publish Container
+﻿name: Build And Publish Container
 
 on:
   workflow_dispatch:
@@ -35,6 +35,6 @@ jobs:
           context: ./container
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/cairn-worker-container:latest
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cairn-worker-container:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/cairn-worker-container:buildcache,mode=max
+          tags: ghcr.io/r20z19/factaudit-worker-container:latest
+          cache-from: type=registry,ref=ghcr.io/r20z19/factaudit-worker-container:buildcache
+          cache-to: type=registry,ref=ghcr.io/r20z19/factaudit-worker-container:buildcache,mode=max

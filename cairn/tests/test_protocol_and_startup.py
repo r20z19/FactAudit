@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import requests
 
-from cairn.dispatcher.protocol.client import CairnClient
-from cairn.dispatcher.runtime.startup_healthcheck import (
+from factaudit.dispatcher.protocol.client import FactAuditClient
+from factaudit.dispatcher.runtime.startup_healthcheck import (
     StartupHealthcheckResult,
     _parse_stdout,
     format_failure_summary,
@@ -15,7 +15,7 @@ def test_client_request_failure_returns_status_zero() -> None:
         def request(self, *_args, **_kwargs):
             raise requests.ConnectionError("offline")
 
-    client = CairnClient("http://server/")
+    client = FactAuditClient("http://server/")
     client._local.session = Session()
 
     result = client.create_intent("proj_001", ["f001"], "investigate", "reasoner")

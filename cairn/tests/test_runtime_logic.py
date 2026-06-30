@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cairn.dispatcher.config import ContainerConfig
-from cairn.dispatcher.protocol.client import ApiResult
-from cairn.dispatcher.runtime.cancellation import TaskCancellation
-from cairn.dispatcher.runtime.containers import ContainerManager
-from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
+from factaudit.dispatcher.config import ContainerConfig
+from factaudit.dispatcher.protocol.client import ApiResult
+from factaudit.dispatcher.runtime.cancellation import TaskCancellation
+from factaudit.dispatcher.runtime.containers import ContainerManager
+from factaudit.dispatcher.runtime.heartbeat import HeartbeatLease
 
 
 @dataclass
@@ -90,7 +90,7 @@ def test_completed_container_stop_action_only_stops_running_container() -> None:
     manager._require_container = lambda _name: container
 
     assert manager.cleanup_completed("proj/001")
-    assert manager.container_name("proj/001") == "cairn-dispatch-proj-001"
+    assert manager.container_name("proj/001") == "factaudit-dispatch-proj-001"
     assert container.stop_count == 1
 
 

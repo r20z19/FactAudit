@@ -1,0 +1,561 @@
+# Joomla CMS 多个安全漏洞总报告
+
+> **项目:** https://github.com/joomla/joomla-cms  
+> **受影响版本:** Joomla 6.1.1 (tag 6.1.1, commit 93a7812a2d) 及以下版本  
+> **审计类型:** 白盒源码审计 + 黑盒验证  
+> **审计日期:** 2026-06-25
+
+---
+
+## 目录
+
+1. [漏洞一: com_fields 存储型XSS（低权限→RCE）](#漏洞一-com_fields-存储型xss低权限rce)
+2. [漏洞二: API用户创建/编辑越权提权](#漏洞二-api用户创建编辑越权提权)
+3. [漏洞三: com_templates deleteFile 目录遍历任意文件删除](#漏洞三-com_templates-deletefile-目录遍历任意文件删除)
+4. [漏洞四: com_banners custombannercode 存储型XSS（低权限→RCE）](#漏洞四-com_banners-custombannercode-存储型xss低权限rce)
+5. [漏洞五: com_finder 反射型XSS](#漏洞五-com_finder-反射型xss)
+6. [漏洞六: PageBreak 折叠面板存储型XSS](#漏洞六-pagebreak-折叠面板存储型xss)
+7. [漏洞七: com_joomlaupdate Zip Slip 任意文件写入](#漏洞七-com_joomlaupdate-zip-slip-任意文件写入)
+8. [漏洞八: com_templates copyFile 任意文件读取（目录遍历）](#漏洞八-com_templates-copyfile-任意文件读取目录遍历)
+9. [漏洞九: API LevelsController 访问等级越权](#漏洞九-api-levelscontroller-访问等级越权)
+10. [漏洞十: API Menus ItemsController 菜单项越权](#漏洞十-api-menus-itemscontroller-菜单项越权)
+11. [漏洞十一: API FieldsController 自定义字段跨组件越权](#漏洞十一-api-fieldscontroller-自定义字段跨组件越权)
+12. [漏洞十二: com_categories API 分类跨组件越权](#漏洞十二-com_categories-api-分类跨组件越权)
+13. [漏洞十三: com_privacy API 导出IDOR信息泄露](#漏洞十三-com_privacy-api-导出idor信息泄露)
+14. [附录: 文件清单](#附录-文件清单)
+
+---
+
+## 漏洞一: com_fields 存储型XSS（低权限→RCE）
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1 — tag 6.1.1, commit 93a7812a2d. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Cross-Site Scripting (XSS) - Stored → Privilege Escalation → RCE |
+| **CVSS 3.1** | **8.0** (High) AV:N/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H |
+| **发现编号** | f016 → f020 |
+
+### 描述
+
+Joomla CMS的com_fields组件在渲染自定义字段值时存在存储型XSS漏洞。`components/com_fields/layouts/field/render.php:39` 中`$field->value` 使用裸 `echo $value` 输出，**未使用 `htmlentities()`/`htmlspecialchars()`** 转义，而同一文件中 `$label`、`$prefix`、`$suffix` 在第34/37/41行均正确使用了 `htmlentities()`。
+
+`textarea` 和 `editor` 类型字段模板(`plugins/fields/textarea/tmpl/textarea.php:21`、`plugins/fields/editor/tmpl/editor.php:21`)将值通过 `HTMLHelper::_('content.prepare', $value)` 处理，该函数分发 `onContentPrepare` 事件到所有内容插件，**没有任何一个插件剥离HTML/JavaScript**。对比 `text` 类型字段模板(`plugins/fields/text/tmpl/text.php`)正确使用了 `htmlentities()`。
+
+### 受影响代码
+
+```php
+// components/com_fields/layouts/field/render.php:39
+<span class="field-value <?php echo $valueClass; ?>"><?php echo $value; ?></span>
+//                                                                  ^^^^^ 未转义
+
+// plugins/fields/textarea/tmpl/textarea.php:21
+echo HTMLHelper::_('content.prepare', $value);
+
+// plugins/fields/editor/tmpl/editor.php:21
+echo HTMLHelper::_('content.prepare', $value);
+```
+
+### 调用链
+
+```
+用户(Manager/Editor)提交含XSS的自定义字段textarea值
+  → onContentAfterSave → FieldModel::setFieldValue()  [原始存储, 无过滤]
+  → FieldsHelper::getFields() → onCustomFieldsPrepareField
+  → textarea.php: HTMLHelper::_('content.prepare', $value) [不剥离HTML/JS]
+  → render.php:39: echo $value  [裸输出, 无转义]
+  → XSS在管理员/访客浏览器中执行
+```
+
+### 权限基线
+
+`core.edit.value` — 从根资产继承，Manager(组6)默认拥有。
+
+### 利用链（XSS→RCE）
+
+XSS载荷自动执行：
+1. 通过AJAX请求管理页面提取CSRF Token
+2. 使用 `com_templates.uploadFile` 上传webshell(`.php`扩展名允许)
+3. 回传webshell路径给攻击者
+
+### 修复建议
+
+```php
+// render.php:39
+<span class="field-value"><?php echo htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); ?></span>
+
+// textarea.php:21 / editor.php:21
+echo htmlspecialchars(HTMLHelper::_('content.prepare', $value), ENT_QUOTES, 'UTF-8');
+```
+
+---
+
+## 漏洞二: API用户创建/编辑越权提权
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1 — tag 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Privilege Escalation / Improper Access Control |
+| **CVSS 3.1** | **8.8** (High) AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H |
+| **发现编号** | f012 |
+
+### 描述
+
+Joomla CMS的REST API用户管理控制器(UsersController)存在越权漏洞。`api/components/com_users/src/Controller/UsersController.php` 未重写 `allowAdd()` 和 `allowEdit()` 方法，继承基类 `ApiController` 默认实现仅检查组件级 `core.create`/`core.edit` 权限。
+
+管理端 `administrator/components/com_users/src/Controller/UserController.php` 的 `allowEdit()` 额外检查 `Access::check($data[$key], 'core.admin')` ——禁止非Super Admin编辑Super Admin账号——但API端**缺失此保护**。
+
+同时 `UserModel::save()` 未验证当前用户是否有权分配特定用户组(如Super Admin组ID:8)。
+
+对比已修复的 `GroupsController`（CVE-2026-48904，要求core.admin），UsersController为同一审计模式下的遗漏。
+
+### 受影响代码
+
+```php
+// api/components/com_users/src/Controller/UsersController.php
+// 未重写 allowAdd() / allowEdit()
+
+// libraries/src/MVC/Controller/ApiController.php:514
+protected function allowEdit($data = [], $key = 'id')
+{
+    return $this->app->getIdentity()->authorise('core.edit', $this->option); // 仅组件级
+}
+
+// 管理端对比: administrator/UserController.php
+protected function allowEdit($data = [], $key = 'id')
+{
+    if (Access::check($data[$key], 'core.admin')) {      // Super Admin保护
+        if (!$this->app->getIdentity()->authorise('core.admin')) {
+            return false;
+        }
+    }
+    return parent::allowEdit($data, $key);
+}
+```
+
+### 利用场景
+
+| 攻击 | 端点 | 条件 |
+|------|------|------|
+| 创建Super Admin | `POST /v1/users {"groups":[8],"password":"..."}` | 持有 `core.create` |
+| 修改Super Admin密码 | `PATCH /v1/users/{id} {"password":"..."}` | 持有 `core.edit` |
+
+**注意：** 默认 `core.login.api` 仅授权Super Admin(组8)，此漏洞在API权限授予低权限角色后方可利用。
+
+### 修复建议
+
+```php
+// 在 UsersController 中增加:
+protected function allowAdd($data = [])
+{
+    if (isset($data['groups']) && in_array(8, $data['groups'])) {
+        if (!$this->app->getIdentity()->authorise('core.admin')) {
+            return false;
+        }
+    }
+    return parent::allowAdd($data);
+}
+
+protected function allowEdit($data = [], $key = 'id')
+{
+    $user = $this->getUserFactory()->loadUserById($data[$key] ?? 0);
+    if ($user->authorise('core.admin') && !$this->app->getIdentity()->authorise('core.admin')) {
+        return false;
+    }
+    return parent::allowEdit($data, $key);
+}
+```
+
+---
+
+## 漏洞三: com_templates deleteFile 目录遍历任意文件删除
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from at least 3.x through 6.2.0-alpha1. |
+| **Class** | Path Traversal / Arbitrary File Deletion |
+| **CVSS 3.1** | **6.5** (Medium) AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:H |
+| **发现编号** | f005 |
+
+### 描述
+
+Joomla CMS的com_templates组件 `deleteFile()` 方法缺少 `Path::check()` 路径范围校验，导致认证后的目录遍历漏洞。
+
+`administrator/components/com_templates/src/Model/TemplateModel.php:1300-1322` 中 `deleteFile()` 直接拼接 `$this->getBasePath() . urldecode(base64_decode($file))` 后传递给 `File::delete()`，而 `File::delete()` 内部仅调用 `Path::clean()`（规范化分隔符，不做边界检查）。
+
+对比 `getSource()` 在同一文件中第945行正确调用了 `Path::check()`。
+
+控制器使用 `getCmd('file')` 过滤（允许 `[a-zA-Z0-9._-]`），但路径遍历 payload `../../configuration.php` 的base64编码 `Ly4uLy4uL2NvbmZpZ3VyYXRpb24ucGhw` **全部由字母数字组成**，完整通过过滤器。
+
+### 受影响代码
+
+```php
+// TemplateModel.php:deleteFile() — 无 Path::check()
+public function deleteFile($file)
+{
+    $filePath = $this->getBasePath() . urldecode(base64_decode($file));
+    $return = File::delete($filePath);  // 仅调用 Path::clean()
+}
+
+// TemplateModel.php:getSource() — 正确使用 Path::check()
+$filePath = Path::check($fileName);  // 异常时拦截
+```
+
+### 攻击载荷
+
+```
+URL参数: file=Ly4uLy4uL2NvbmZpZ3VyYXRpb24ucGhw
+解码后: ../../configuration.php
+最终路径: /var/www/html/templates/cassiopeia/../../configuration.php
+         = /var/www/html/configuration.php  ← 被删除
+```
+
+### 修复建议
+
+```php
+// deleteFile() 中增加:
+$filePath = Path::check($this->getBasePath() . urldecode(base64_decode($file)), $this->getBasePath());
+```
+
+---
+
+## 漏洞四: com_banners custombannercode 存储型XSS（低权限→RCE）
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 3.x through 6.2.0-alpha1. |
+| **Class** | Cross-Site Scripting (XSS) - Stored → RCE |
+| **CVSS 3.1** | **8.0** (High) AV:N/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H |
+| **发现编号** | f028 |
+
+### 描述
+
+Joomla CMS `com_banners` 组件的 `custombannercode` 字段使用 `filter="raw"` 不过滤任何HTML。前端渲染模板 `modules/mod_banners/tmpl/default.php:32` 使用裸 `echo` 输出该值，无 `htmlspecialchars()` 转义。
+
+Editor(组4)默认从根资产继承 `core.edit` 权限，可编辑banner。
+
+### 受影响代码
+
+```php
+// modules/mod_banners/tmpl/default.php:32
+<?php echo str_replace(['{CLICKURL}', '{NAME}'], [$link, $item->name], $item->custombannercode); ?>
+//                                                                                 ^^^^^^^^^^^^^^^^^ 裸输出
+
+// administrator/components/com_banners/forms/banner.xml:97-103
+<field name="custombannercode" type="textarea" filter="raw" .../>
+//                                                         ^^^ 不过滤
+```
+
+### 利用链
+
+```
+Editor登录 → 编辑banner → custombannercode=<script>...</script>
+  → 存储到数据库
+  → 前台页面加载mod_banners → echo输出→ XSS触发
+  → XSS窃取CSRF Token → com_templates.uploadFile上传webshell → RCE
+```
+
+### 修复建议
+
+```php
+// default.php:32
+echo htmlspecialchars(
+    str_replace(['{CLICKURL}', '{NAME}'], [$link, $item->name], $item->custombannercode),
+    ENT_QUOTES, 'UTF-8'
+);
+```
+
+---
+
+## 漏洞五: com_finder 反射型XSS
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 2.5 through 6.2.0-alpha1. |
+| **Class** | Cross-Site Scripting (XSS) - Reflected |
+| **CVSS 3.1** | **6.1** (Medium) AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N |
+| **发现编号** | f048 |
+
+### 描述
+
+Joomla CMS的com_finder智能搜索组件在显示"已解释查询"时，搜索词经 `Text::sprintf()` 直接嵌入HTML无转义。`Text::sprintf()` 内部调用PHP原生 `sprintf()`，不执行HTML实体编码。
+
+3条受影响语言字符串的 `%s` 占位符均未做 `htmlspecialchars()` 处理。
+
+搜索页面默认对访客开放（无需登录），`show_explained_query` 默认启用。
+
+### 受影响代码
+
+```php
+// administrator/components/com_finder/src/Service/HTML/Query.php:45
+$parts[] = '<span class="query-required">' . Text::sprintf('COM_FINDER_QUERY_TOKEN_REQUIRED', $token->term) . '</span>';
+
+// libraries/src/Language/Text.php:281
+return \call_user_func_array('sprintf', $args);  // 原生PHP sprintf，不转义
+```
+
+```ini
+; language/en-GB/com_finder.ini
+COM_FINDER_QUERY_TOKEN_REQUIRED=<span class="term">%s</span> is required
+COM_FINDER_QUERY_TOKEN_OPTIONAL=<span class="term">%s</span> is optional
+COM_FINDER_QUERY_TOKEN_EXCLUDED=<span class="term">%s</span> should be excluded
+```
+
+**注意：** finder分词器会剥离搜索词中的HTML标签字符(`, `/`, `"`, `'`等)，实际XSS利用需要分词器处理后的词条仍包含特殊字符。属于防御纵深漏洞，在默认分词器配置下直接利用受限，但修改分词器规则或使用自定义查询可绕过。
+
+### 修复建议
+
+```php
+// Query.php:45,52,59
+Text::sprintf('COM_FINDER_QUERY_TOKEN_REQUIRED', htmlspecialchars($token->term, ENT_QUOTES, 'UTF-8'))
+```
+
+---
+
+## 漏洞六: PageBreak 折叠面板存储型XSS
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 3.x through 6.2.0-alpha1. |
+| **Class** | Cross-Site Scripting (XSS) - Stored |
+| **CVSS 3.1** | **6.4** (Medium) AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N |
+| **发现编号** | f047(1) |
+
+### 描述
+
+Joomla CMS的PageBreak内容插件(plugins/content/pagebreak)在解析文章中的`<hr class="system-pagebreak">`标签时，将`title`/`alt`属性值经 `stripslashes()` 后直接传递给 `Bootstrap::addSlide()`。
+
+`Bootstrap::addSlide()` 使用HEREDOC将 `$text` 参数直接嵌入HTML字符串，未使用 `htmlspecialchars()` 转义。对比 `uiTab::addTab()` 第97行正确使用 `htmlspecialchars()`，说明此处是开发者遗漏。
+
+### 受影响代码
+
+```php
+// PageBreak.php:234-244
+$title = stripslashes($match['alt']);  // 或 $match['title']
+$t[] = (string) HTMLHelper::_('bootstrap.addSlide', 'myAccordion', $title, $index);
+
+// Bootstrap.php:751
+public static function addSlide($selector, $text, $id, $class = ''): string
+{
+    return <<<HTMLSTR
+    <div class="accordion-item $class">
+        <h2 class="accordion-header" id="$id-heading">
+            <button class="accordion-button $collapsed" type="button">
+                $text   <!-- 直接嵌入，无转义 -->
+            </button>
+        </h2>
+    </div>
+HTMLSTR;
+}
+```
+
+### 利用场景
+
+任意可编辑文章的用户(Editor组4默认有`core.edit`)可在文章HTML中插入：
+```html
+<hr class="system-pagebreak" title="<img src=x onerror=alert(document.cookie)>" />
+```
+文章使用sliders(折叠面板)分页样式时，任意访客触发XSS。
+
+### 修复建议
+
+```php
+// Bootstrap.php addSlide():
+$text = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+```
+
+---
+
+## 漏洞七: com_joomlaupdate Zip Slip 任意文件写入
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.4 through 6.2.0-alpha1. |
+| **Class** | Path Traversal / Arbitrary File Write (Zip Slip) |
+| **CVSS 3.1** | **7.2** (High) AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H |
+| **发现编号** | f022(1) |
+
+### 描述
+
+Joomla CMS的com_joomlaupdate组件使用自定义ZIP解压类(ZIPExtraction)处理更新包时，`readFileHeader()` 仅检查basename是否为 `"."` 或 `".."`，未检测ZIP条目名中的 `"../"` 目录穿越序列。条目名直接拼接 `addPath` 后传给 `fopen()` 写入。
+
+### 受影响代码
+
+```php
+// extract.php:1086-1088 — 仅检查basename
+if ((basename($this->fileHeader->file) == ".") || (basename($this->fileHeader->file) == "..")) {
+    $isBannedFile = true;
+}
+// 未检查: strpos($this->fileHeader->file, '..') !== false
+
+// extract.php:1127 — 直接拼接，无范围检查
+$this->fileHeader->file = $this->addPath . $this->fileHeader->file;
+
+// extract.php:1501 — 直接写入穿越路径
+$outfp = @fopen($this->fileHeader->realFile, 'wb');
+```
+
+### 利用场景
+
+在upload路径(Super Admin上传自定义ZIP包)中：
+- `checkPackageFileZip()` 仅检查 `installation/index.php` 是否存在及 `joomla.xml` 版本正确
+- **不扫描ZIP条目中的目录穿越**
+- `update.php` 用32位CSPRNG密码保护(有效期5400秒)
+
+### 修复建议
+
+```php
+// 在readFileHeader()中增加:
+if (strpos($this->fileHeader->file, '..') !== false) {
+    $isBannedFile = true;
+}
+// 或使用Path::check()
+$realPath = Path::check($this->addPath . $this->fileHeader->file, $this->addPath);
+```
+
+---
+
+## 漏洞八: com_templates copyFile 任意文件读取（目录遍历）
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配（建议合并至漏洞三） |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from at least 3.x through 6.2.0-alpha1. |
+| **Class** | Path Traversal / Arbitrary File Read |
+| **CVSS 3.1** | **4.9** (Medium) AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:N/A:N |
+| **发现编号** | f039(1) |
+
+### 描述
+
+Joomla CMS的com_templates组件 `copyFile()` 方法（第1762行）源路径缺少 `Path::check()`。`$relPath` 经 `base64_decode($file)` 获取，`$file` 经 `getCmd()` 过滤（`[a-zA-Z0-9._-]`），但base64编码的 `../../configuration.php` payload全部由字母数字组成，通过过滤器。
+
+`File::copy($path . $relPath, $newPath)` 将源文件复制到模板目录下，可通过模板编辑器读取文件内容。
+
+### 受影响代码
+
+```php
+// TemplateModel.php:1762
+$path = $this->getBasePath();
+$relPath = base64_decode($file);  // ../../configuration.php
+File::copy($path . $relPath, $newPath);  // 无 Path::check()
+```
+
+### 修复建议
+
+与漏洞三相同：增加 `Path::check()` 调用。
+
+---
+
+## 漏洞九: API LevelsController 访问等级越权
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Improper Access Control |
+| **CVSS 3.1** | **8.8** (High) AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H |
+| **发现编号** | f041(1) |
+
+### 描述
+
+`api/components/com_users/src/Controller/LevelsController.php` 未重写 `allowAdd/allowEdit/delete`，继承基类仅校验组件级 `core.create/core.edit/core.delete`。`com_users` 组件级 `core.admin` 仅授权组7，但 `core.create/core.edit` 回退到根资产继承——`core.create` 给Author(组3)，`core.edit` 给Editor(组4)。
+
+管理端 `LevelController::allowSave()` 要求 `core.admin`，API端缺失此检查。与已修复的GroupsController(CVE-2026-48904)属同一模式。
+
+---
+
+## 漏洞十: API Menus ItemsController 菜单项越权
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Improper Access Control |
+| **CVSS 3.1** | **8.8** (High) AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H |
+| **发现编号** | f041(2) |
+
+### 描述
+
+`api/components/com_menus/src/Controller/ItemsController.php` 未重写 `allowAdd/allowEdit/delete`，仅校验组件级 `core.create/core.edit/core.delete`。管理端 `ItemController::allowAdd()` 校验菜单级 `com_menus.menu.{menutypeID}` 的 `core.create`。API端缺失菜单级ACL检查。
+
+---
+
+## 漏洞十一: API FieldsController 自定义字段跨组件越权
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Improper Access Control |
+| **CVSS 3.1** | **7.1** (High) AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H |
+| **发现编号** | f041(3) |
+
+### 描述
+
+`api/components/com_fields/src/Controller/FieldsController.php` 未重写 `allowAdd/allowEdit`。管理端 `FieldController::allowAdd()` 检查从context提取的组件级 `core.create`。API端仅校验 `com_fields` 组件级权限，且 `context` 参数用户可控。
+
+---
+
+## 漏洞十二: com_categories API 分类跨组件越权
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Improper Access Control |
+| **CVSS 3.1** | **7.5** (High) AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N |
+| **发现编号** | f026 |
+
+### 描述
+
+`api/components/com_categories/src/Controller/CategoriesController.php` 未重写 `allowAdd/allowEdit/delete`。com_categories 无access.xml且asset rules为`{}`，权限从根资产继承。API端不区分 `extension` 参数——Author可通过 `POST /v1/categories?extension=com_banners` 为无权限的com_banners创建分类。
+
+---
+
+## 漏洞十三: com_privacy API 导出IDOR信息泄露
+
+| 字段 | 内容 |
+|------|------|
+| **潜在CVE编号** | 待分配 |
+| **Vendor** | Joomla! Project (github.com/joomla) |
+| **Product** | Joomla! CMS (github.com/joomla/joomla-cms) |
+| **Version** | 6.1.1. Affects all versions from 4.0.0 through 6.2.0-alpha1. |
+| **Class** | Insecure Direct Object Reference (IDOR) / Information Disclosure |
+| **CVSS 3.1** | **6.5** (Medium) AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N |
+| **发现编号** | f023(1) |
+
+### 描述
+
+`api/components/com_privacy/src/Controller/RequestsController.php` 的 `export()` 方法未调用 `allowEdit()` 验证当前用户的导出权限。持有 `core.login.api` 的用户可遍历 `GET /v1/privacy/requests/export/:id` 导出任意已确认请求的PII数据，包括 `#__users`(email/name/username)、`#__user_profiles`(含API Token HMAC种子)、`#__contact_details` 等。
+
+---

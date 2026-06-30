@@ -1,4 +1,4 @@
-server: "http://127.0.0.1:8000"
+﻿server: "http://127.0.0.1:8000"
 
 runtime:
   interval: 3
@@ -21,7 +21,7 @@ tasks:
     conclude_timeout: 5
 
 container:
-  image: "ghcr.io/oritera/cairn-worker-container:latest"
+  image: "ghcr.io/r20z19/factaudit-worker-container:latest"
   network_mode: "host"
   completed_action: "stop"
   cap_add:

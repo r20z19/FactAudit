@@ -1,5 +1,5 @@
-# Cairn server API endpoint.
-server: "http://cairn-server:8000"
+﻿# FactAudit server API endpoint.
+server: "http://factaudit-server:8000"
 
 # Shared environment variables merged into every worker.
 common_env:
@@ -20,7 +20,7 @@ runtime:
   # "startup_and_task" checks at dispatcher startup and before every task.
   # "startup_only" checks only at startup. "disabled" skips automatic worker checks.
   worker_healthcheck: "startup_only"
-  # Prompt set loaded from cairn/src/cairn/dispatcher/prompts/.
+  # Prompt set loaded from cairn/src/factaudit/dispatcher/prompts/.
   prompt_group: "default"
 
 tasks:
@@ -39,10 +39,17 @@ tasks:
     timeout: 300
     # Time budget for conclude fallback used to summarize confirmed findings from the same session.
     conclude_timeout: 90
+  develop:
+    # Main execution timeout for long-running script synthesis. Only dispatched for intents
+    # whose description starts with "DEVELOP:".
+    timeout: 1800
+    # Time budget for conclude fallback after timeout; reduced to 60s when the project
+    # is being completed while develop is still running.
+    conclude_timeout: 300
 
 container:
   # Base worker container. The dispatcher execs agent commands inside one container per project.
-  image: "ghcr.io/oritera/cairn-worker-container:latest"
+  image: "ghcr.io/r20z19/factaudit-worker-container:latest"
   network_mode: "host"
   # "stop" keeps finished containers for inspection; "remove" is cleaner but loses post-run state.
   completed_action: "stop"
@@ -50,6 +57,13 @@ container:
   # cap_add:
   #   - "NET_RAW"
   #   - "NET_ADMIN"
+  # Host-to-container bind mounts. host_source is the absolute path on the host machine.
+  # container_target is the absolute mount point inside the project container.
+  # read_only defaults to false (read-write); set true for read-only mounts.
+  volumes:
+    - host_source: "/home/user/into_docker_files"
+      container_target: "/home/kali/myfiles"
+      # read_only: true
 
 
 workers:
@@ -86,3 +100,16 @@ workers:
       PI_API_KEY: "sk-xxx"
       PI_PROVIDER_API: "openai-completions"
       PI_MODEL_CONTEXT_WINDOW: "262144"
+
+  # Long-running script development worker. Only dispatched for intent descriptions
+  # starting with "DEVELOP:". Uses a dedicated max_running limit to avoid competing
+  # with fast explore tasks.
+  - name: "claudecode_develop"
+    type: "claudecode"
+    task_types: [develop]
+    max_running: 2
+    priority: 1
+    env:
+      ANTHROPIC_MODEL: "deepseek-v4-pro"
+      ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
+      ANTHROPIC_AUTH_TOKEN: "sk-xxx"

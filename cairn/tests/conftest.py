@@ -1,11 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cairn.dispatcher.config import DispatchConfig
-from cairn.dispatcher.protocol.client import ApiResult
-from cairn.dispatcher.workers.base import DriverResult
-from cairn.server.models import Fact, Hint, Intent, ProjectDetail, ProjectMeta
+from factaudit.dispatcher.config import DispatchConfig
+from factaudit.dispatcher.protocol.client import ApiResult
+from factaudit.dispatcher.workers.base import DriverResult
+from factaudit.server.models import Fact, Hint, Intent, ProjectDetail, ProjectMeta
 
 
 def make_config() -> DispatchConfig:
@@ -24,6 +24,7 @@ def make_config() -> DispatchConfig:
                 "bootstrap": {"timeout": 10, "conclude_timeout": 5},
                 "reason": {"timeout": 10, "max_intents": 3},
                 "explore": {"timeout": 10, "conclude_timeout": 5},
+                "develop": {"timeout": 30, "conclude_timeout": 10},
             },
             "container": {
                 "image": "test-image",

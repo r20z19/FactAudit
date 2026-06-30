@@ -1,13 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
 import pytest
 from pydantic import ValidationError
 
-from cairn.dispatcher.config import DispatchConfig, WorkerConfig, validate_prompt_resources
-from cairn.dispatcher.workers.adapters.codex import CodexDriver
-from cairn.dispatcher.workers.adapters.pi import PiDriver
+from factaudit.dispatcher.config import DispatchConfig, WorkerConfig, validate_prompt_resources
+from factaudit.dispatcher.workers.adapters.codex import CodexDriver
+from factaudit.dispatcher.workers.adapters.pi import PiDriver
 
 from conftest import make_config
 
@@ -106,7 +106,7 @@ def test_pi_driver_models_json_and_execute_argv_include_context_window_and_tools
     result = PiDriver().build_execute(worker, "prompt", None)
     models = json.loads(result.argv[5])
 
-    assert models["providers"]["cairn"]["models"][0]["contextWindow"] == 131072
+    assert models["providers"]["factaudit"]["models"][0]["contextWindow"] == 131072
     assert "--tools" in result.argv
     assert result.argv[-2:] == ["-p", "prompt"]
 
@@ -131,5 +131,5 @@ def test_codex_driver_execute_argv_passes_model_endpoint_and_prompt() -> None:
 
     assert "--model" in argv
     assert "gpt-test" in argv
-    assert 'model_providers.cairn.base_url="http://api/v1"' in argv
+    assert 'model_providers.factaudit.base_url="http://api/v1"' in argv
     assert argv[-2:] == ["--", "prompt"]
