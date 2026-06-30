@@ -12,9 +12,9 @@ runtime:
   # Global concurrency cap across all workers and all projects.
   max_workers: 8
   # Maximum number of projects that may be actively scheduled at the same time.
-  max_running_projects: 3
+  max_running_projects: 5
   # Per-project worker cap. Prevents one project from monopolizing the whole dispatcher.
-  max_project_workers: 4
+  max_project_workers: 7
   # Timeout for each enabled worker healthcheck.
   healthcheck_timeout: 20
   # "startup_and_task" checks at dispatcher startup and before every task.
@@ -40,12 +40,18 @@ tasks:
     # Time budget for conclude fallback used to summarize confirmed findings from the same session.
     conclude_timeout: 90
   develop:
-    # Main execution timeout for long-running script synthesis. Only dispatched for intents
-    # whose description starts with "DEVELOP:".
     timeout: 1800
-    # Time budget for conclude fallback after timeout; reduced to 60s when the project
-    # is being completed while develop is still running.
     conclude_timeout: 300
+  reason:
+    # Reason decides whether the goal is met and whether new intents should be proposed.
+    timeout: 300
+    # Hard cap on how many new intents one reason step may create.
+    max_intents: 4
+  explore:
+    # Main execution timeout for exploring a claimed intent.
+    timeout: 300
+    # Time budget for conclude fallback used to summarize confirmed findings from the same session.
+    conclude_timeout: 90
 
 container:
   # Base worker container. The dispatcher execs agent commands inside one container per project.
@@ -57,11 +63,8 @@ container:
   # cap_add:
   #   - "NET_RAW"
   #   - "NET_ADMIN"
-  # Host-to-container bind mounts. host_source is the absolute path on the host machine.
-  # container_target is the absolute mount point inside the project container.
-  # read_only defaults to false (read-write); set true for read-only mounts.
   volumes:
-    - host_source: "/home/user/into_docker_files"
+    - host_source: "D:/0Files0/CVE/factaudit/myfiles"
       container_target: "/home/kali/myfiles"
       # read_only: true
 
@@ -69,47 +72,44 @@ container:
 workers:
   # Worker priority is ascending: lower numbers are preferred first.
   # max_running is per-worker concurrency. Slower backends such as Pi usually benefit from lower values.
-  - name: "claudecode_deepseek-v4-pro"
+  - name: "claudecode_deepseek-v4-flash"
     type: "claudecode"
     task_types: [bootstrap, reason, explore]
-    max_running: 2
+    max_running: 3
     priority: 0
     env:
-      ANTHROPIC_MODEL: "deepseek-v4-pro"
+      ANTHROPIC_MODEL: "deepseek-v4-flash"
       ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
-      ANTHROPIC_AUTH_TOKEN: "sk-xxx"
+      ANTHROPIC_AUTH_TOKEN: ""
 
-  - name: "codex_qwen3.6-plus"
+  - name: "codex_deepseek-v4-flash"
     type: "codex"
     task_types: [bootstrap,reason,explore]
-    max_running: 2
+    max_running: 3
     priority: 0
     env:
-      CODEX_MODEL: "qwen3.6-plus"
-      CODEX_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      OPENAI_API_KEY: "sk-xxx"
+      CODEX_MODEL: "deepseek-v4-flash"
+      CODEX_BASE_URL: "https://api.deepseek.com/v1"
+      OPENAI_API_KEY: ""
 
-  - name: "pi_qwen3.6-plus"
+  - name: "pi_deepseek-v4-flash"
     type: "pi"
     task_types: [bootstrap,reason,explore]
-    max_running: 2
+    max_running: 3
     priority: 0
     env:
-      PI_MODEL: "qwen3.6-plus"
-      PI_BASE_URL: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-      PI_API_KEY: "sk-xxx"
+      PI_MODEL: "deepseek-v4-flash"
+      PI_BASE_URL: "https://api.deepseek.com/v1"
+      PI_API_KEY: ""
       PI_PROVIDER_API: "openai-completions"
       PI_MODEL_CONTEXT_WINDOW: "262144"
 
-  # Long-running script development worker. Only dispatched for intent descriptions
-  # starting with "DEVELOP:". Uses a dedicated max_running limit to avoid competing
-  # with fast explore tasks.
   - name: "claudecode_develop"
     type: "claudecode"
     task_types: [develop]
     max_running: 2
     priority: 1
     env:
-      ANTHROPIC_MODEL: "deepseek-v4-pro"
+      ANTHROPIC_MODEL: "deepseek-v4-flash"
       ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic"
-      ANTHROPIC_AUTH_TOKEN: "sk-xxx"
+      ANTHROPIC_AUTH_TOKEN: ""

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-DEFAULT_DB = Path.home() / ".local" / "share" / "cairn" / "factaudit.db"
+DEFAULT_DB = Path.home() / ".local" / "share" / "factaudit" / "factaudit.db"
 
 _db_path: Path | None = None
 
